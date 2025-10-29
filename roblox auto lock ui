@@ -19,7 +19,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Main black frame
+-- Main black frame (not draggable)
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 250, 0, 250)
 mainFrame.Position = UDim2.new(0.5, -125, 0.5, -125)
@@ -41,7 +41,7 @@ indicator.Position = UDim2.new(0.5, -50, 0.5, -2)
 indicator.BackgroundColor3 = Color3.fromRGB(120,120,120)
 indicator.Parent = topBar
 
--- Make topBar draggable
+-- Dragging logic for topBar only
 do
     local dragging = false
     local dragStart, startPos
@@ -68,7 +68,7 @@ do
     end)
 end
 
--- Open button
+-- Open button (dragable)
 local openButton = Instance.new("TextButton")
 openButton.Size = UDim2.new(0, 100, 0, 35)
 openButton.Position = UDim2.new(0, 20, 0, 20)
@@ -76,6 +76,33 @@ openButton.Text = "Settings"
 openButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
 openButton.TextScaled = true
 openButton.Parent = screenGui
+
+-- Drag logic for open button
+do
+    local dragging = false
+    local dragStart, startPos
+    local function update(input)
+        local delta = input.Position - dragStart
+        openButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    openButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = openButton.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    openButton.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+end
 
 openButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = not mainFrame.Visible
@@ -94,7 +121,7 @@ closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
 end)
 
--- Utility functions
+-- Utility functions for UI
 local function createLabel(text, position)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0, 220, 0, 25)
@@ -155,7 +182,7 @@ local function createToggle(default, text, position, callback)
     end)
 end
 
--- Create UI
+-- Create UI elements
 createLabel("Snap Radius", UDim2.new(0,10,0,40))
 createSlider(10,200,settings.snapRadius,UDim2.new(0,10,0,65),function(value) settings.snapRadius = value end)
 
@@ -165,32 +192,68 @@ createSlider(0,1,settings.snapPower,UDim2.new(0,10,0,120),function(value) settin
 createToggle(settings.highlightEnabled,"Highlight",UDim2.new(0,10,0,150),function(value) settings.highlightEnabled = value end)
 createToggle(settings.autoSnapEnabled,"Auto Snap",UDim2.new(0,10,0,185),function(value) settings.autoSnapEnabled = value end)
 
--- Highlight all players except local
-local highlightAdornments = {}
+-- Tables to track adornments
+local highlightTable = {}
+local boxTable = {}
 
-local function highlightCharacter(character)
-    for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") then
-            if not highlightAdornments[part] then
-                local adorn = Instance.new("BoxHandleAdornment")
-                adorn.Adornee = part
-                adorn.Size = part.Size
-                adorn.Color3 = Color3.fromRGB(255,0,0)
-                adorn.Transparency = 0.6
-                adorn.AlwaysOnTop = true
-                adorn.ZIndex = 10
-                adorn.Parent = part
-                highlightAdornments[part] = adorn
-            end
-        end
-    end
+-- Parts we want boxes on
+local boxParts = {"Torso", "Head", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
+
+-- Check visibility using raycast
+local function isVisible(part)
+    local direction = part.Position - Camera.CFrame.Position
+    local ray = Ray.new(Camera.CFrame.Position, direction)
+    local hitPart, _ = Workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
+    return hitPart and hitPart:IsDescendantOf(part.Parent)
 end
 
-local function removeHighlight(character)
-    for _, part in ipairs(character:GetChildren()) do
-        if highlightAdornments[part] then
-            highlightAdornments[part]:Destroy()
-            highlightAdornments[part] = nil
+-- Update highlights and boxes
+local function updateHighlights()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            -- Highlight torso
+            local torso = player.Character:FindFirstChild("Torso")
+            if torso then
+                if settings.highlightEnabled and not highlightTable[player] then
+                    local hl = Instance.new("Highlight")
+                    hl.Adornee = torso
+                    hl.FillColor = Color3.fromRGB(255,0,0)
+                    hl.FillTransparency = 0.6
+                    hl.OutlineColor = Color3.fromRGB(255,255,255)
+                    hl.OutlineTransparency = 0
+                    hl.Parent = LocalPlayer:WaitForChild("PlayerGui")
+                    highlightTable[player] = hl
+                elseif not settings.highlightEnabled and highlightTable[player] then
+                    highlightTable[player]:Destroy()
+                    highlightTable[player] = nil
+                end
+            end
+
+            -- Boxes on specific parts
+            for _, partName in ipairs(boxParts) do
+                local part = player.Character:FindFirstChild(partName)
+                if part then
+                    if isVisible(part) then
+                        if not (boxTable[player] and boxTable[player][partName]) then
+                            boxTable[player] = boxTable[player] or {}
+                            local box = Instance.new("BoxHandleAdornment")
+                            box.Adornee = part
+                            box.Size = part.Size
+                            box.Color3 = Color3.fromRGB(0,255,0)
+                            box.Transparency = 0.5
+                            box.AlwaysOnTop = true
+                            box.ZIndex = 10
+                            box.Parent = part
+                            boxTable[player][partName] = box
+                        end
+                    else
+                        if boxTable[player] and boxTable[player][partName] then
+                            boxTable[player][partName]:Destroy()
+                            boxTable[player][partName] = nil
+                        end
+                    end
+                end
+            end
         end
     end
 end
@@ -200,17 +263,17 @@ local function getVisibleTarget()
     local closest
     local closestDist = settings.snapRadius + 1
     for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local headPos = player.Character.Head.Position
-            local dir = headPos - Camera.CFrame.Position
-            local ray = Ray.new(Camera.CFrame.Position, dir)
-            local hitPart, hitPos = Workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
-            if hitPart then
-                if hitPart:IsDescendantOf(player.Character) then
+        if player ~= LocalPlayer and player.Character then
+            local torso = player.Character:FindFirstChild("Torso")
+            if torso then
+                local dir = torso.Position - Camera.CFrame.Position
+                local ray = Ray.new(Camera.CFrame.Position, dir)
+                local hitPart, _ = Workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
+                if hitPart and hitPart:IsDescendantOf(player.Character) then
                     local dist = dir.Magnitude
                     if dist < closestDist then
                         closestDist = dist
-                        closest = player.Character.Head
+                        closest = torso
                     end
                 end
             end
@@ -221,15 +284,7 @@ end
 
 -- Main loop
 RunService.RenderStepped:Connect(function()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            if settings.highlightEnabled then
-                highlightCharacter(player.Character)
-            else
-                removeHighlight(player.Character)
-            end
-        end
-    end
+    updateHighlights()
 
     if settings.autoSnapEnabled and settings.snapPower > 0 then
         local target = getVisibleTarget()
