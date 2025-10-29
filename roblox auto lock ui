@@ -1,14 +1,132 @@
-local UserInputService = game:GetService("UserInputService")
+-- LocalScript inside StarterPlayerScripts
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
+-- Default settings
+local settings = {
+    snapRadius = 50,
+    highlightEnabled = true,
+    autoSnapEnabled = true,
+    snapPower = 1
+}
+
+-- UI creation
+local screenGui = Instance.new("ScreenGui")
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local function createLabel(text, position)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 200, 0, 25)
+    label.Position = position
+    label.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Text = text
+    label.TextScaled = true
+    label.Parent = screenGui
+    return label
+end
+
+local function createSlider(min, max, default, position, callback)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0, 200, 0, 30)
+    sliderFrame.Position = position
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    sliderFrame.Parent = screenGui
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new(default, 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(0,255,0)
+    sliderFill.Parent = sliderFrame
+
+    local dragging = false
+    sliderFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+    sliderFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    sliderFrame.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relativeX = math.clamp(input.Position.X - sliderFrame.AbsolutePosition.X, 0, sliderFrame.AbsoluteSize.X)
+            local value = min + (relativeX / sliderFrame.AbsoluteSize.X) * (max - min)
+            sliderFill.Size = UDim2.new(relativeX / sliderFrame.AbsoluteSize.X, 0, 1, 0)
+            callback(value)
+        end
+    end)
+end
+
+local function createToggle(default, text, position, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 200, 0, 30)
+    button.Position = position
+    button.Text = text .. " : " .. tostring(default)
+    button.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    button.TextScaled = true
+    button.Parent = screenGui
+
+    button.MouseButton1Click:Connect(function()
+        default = not default
+        button.Text = text .. " : " .. tostring(default)
+        callback(default)
+    end)
+end
+
+-- Create UI elements
+createSlider(10, 200, 50/200, UDim2.new(0,10,0,10), function(value)
+    settings.snapRadius = value
+end)
+
+createSlider(0, 1, 1, UDim2.new(0,10,0,50), function(value)
+    settings.snapPower = value
+end)
+
+createToggle(settings.highlightEnabled, "Highlight", UDim2.new(0,10,0,90), function(value)
+    settings.highlightEnabled = value
+end)
+
+createToggle(settings.autoSnapEnabled, "Auto Snap", UDim2.new(0,10,0,130), function(value)
+    settings.autoSnapEnabled = value
+end)
+
+-- Highlight functions
+local function highlightCharacter(character)
+    for _, part in ipairs(character:GetChildren()) do
+        if part:IsA("BasePart") and not part:FindFirstChild("Highlight") then
+            local box = Instance.new("SelectionBox")
+            box.Adornee = part
+            box.LineThickness = 0.05
+            box.Color3 = Color3.new(1, 0, 0)
+            box.Parent = part
+            box.Name = "Highlight"
+        end
+    end
+end
+
+local function removeHighlight(character)
+    for _, part in ipairs(character:GetChildren()) do
+        local box = part:FindFirstChild("Highlight")
+        if box then
+            box:Destroy()
+        end
+    end
+end
+
+-- Get closest target within radius
 local function getClosestTarget()
     local closest
-    local closestDist = math.huge
+    local closestDist = settings.snapRadius + 1
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local distance = (player.Character.Head.Position - workspace.CurrentCamera.CFrame.Position).Magnitude
-            if distance < closestDist and distance <= 50 then
-                closestDist = distance
+            local dist = (player.Character.Head.Position - Camera.CFrame.Position).Magnitude
+            if dist < closestDist then
+                closestDist = dist
                 closest = player.Character.Head
             end
         end
@@ -16,11 +134,27 @@ local function getClosestTarget()
     return closest
 end
 
+-- Main loop
 RunService.RenderStepped:Connect(function()
-    local target = getClosestTarget()
-    if target then
-        local cam = workspace.CurrentCamera
-        local direction = (target.Position - cam.CFrame.Position).Unit
-        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + direction)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local dist = (player.Character.Head.Position - Camera.CFrame.Position).Magnitude
+            if settings.highlightEnabled and dist <= settings.snapRadius then
+                highlightCharacter(player.Character)
+            else
+                removeHighlight(player.Character)
+            end
+        end
+    end
+
+    if settings.autoSnapEnabled then
+        local target = getClosestTarget()
+        if target and settings.snapPower > 0 then
+            local cam = Camera
+            local direction = (target.Position - cam.CFrame.Position)
+            local newCFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + direction), settings.snapPower)
+            cam.CFrame = newCFrame
+        end
     end
 end)
+
