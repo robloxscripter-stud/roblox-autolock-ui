@@ -1,207 +1,26 @@
---// LocalScript: Auto Lock UI (Draggable, Mobile-friendly, Closable) //-- 
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
-local player = game.Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
-local runService = game:GetService("RunService")
-local userInput = game:GetService("UserInputService")
-
--- Main GUI
-local screenGui = Instance.new("ScreenGui", playerGui)
-screenGui.Name = "AutoLockUI"
-screenGui.ResetOnSpawn = false
-
--- Frame
-local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 250, 0, 230)
-frame.Position = UDim2.new(0.5, -125, 0.6, -115)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-frame.BackgroundTransparency = 0.2
-frame.BorderSizePixel = 0
-frame.Active = true -- for mobile drag
-
-local uiCorner = Instance.new("UICorner", frame)
-uiCorner.CornerRadius = UDim.new(0, 8)
-
-local uiListLayout = Instance.new("UIListLayout", frame)
-uiListLayout.Padding = UDim.new(0, 10)
-uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-
--- Title + Close Button
-local titleBar = Instance.new("Frame", frame)
-titleBar.Size = UDim2.new(1, 0, 0, 25)
-titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-local titleCorner = Instance.new("UICorner", titleBar)
-titleCorner.CornerRadius = UDim.new(0, 8)
-
-local titleLabel = Instance.new("TextLabel", titleBar)
-titleLabel.Size = UDim2.new(0.8, 0, 1, 0)
-titleLabel.Position = UDim2.new(0, 5, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Auto Lock Menu"
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local closeBtn = Instance.new("TextButton", titleBar)
-closeBtn.Size = UDim2.new(0.2, -5, 1, 0)
-closeBtn.Position = UDim2.new(0.8, 0, 0, 0)
-closeBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-
--- Reopen Button (hidden by default)
-local reopenBtn = Instance.new("TextButton", screenGui)
-reopenBtn.Size = UDim2.new(0, 120, 0, 40)
-reopenBtn.Position = UDim2.new(0, 20, 1, -60)
-reopenBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-reopenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-reopenBtn.Text = "Open Auto Lock"
-reopenBtn.Visible = false
-local reopenCorner = Instance.new("UICorner", reopenBtn)
-reopenCorner.CornerRadius = UDim.new(0, 8)
-
--- Helper: create buttons
-local function makeButton(name, text)
-	local button = Instance.new("TextButton")
-	button.Name = name
-	button.Size = UDim2.new(0.8, 0, 0, 35)
-	button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.Text = text
-	button.Font = Enum.Font.GothamBold
-	button.TextSize = 16
-	local corner = Instance.new("UICorner", button)
-	corner.CornerRadius = UDim.new(0, 6)
-	button.Parent = frame
-	return button
+local function getClosestTarget()
+    local closest
+    local closestDist = math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local distance = (player.Character.Head.Position - workspace.CurrentCamera.CFrame.Position).Magnitude
+            if distance < closestDist and distance <= 50 then
+                closestDist = distance
+                closest = player.Character.Head
+            end
+        end
+    end
+    return closest
 end
 
--- UI Buttons
-local autoLockBtn = makeButton("AutoLockBtn", "Activate Auto Lock: OFF")
-local partBtn = makeButton("PartBtn", "Lock on: Head")
-local distanceBtn = makeButton("DistanceBtn", "Set Distance (default: 50)")
-local highlightBtn = makeButton("HighlightBtn", "Highlight Players")
-
--- Distance Input
-local distanceInput = Instance.new("TextBox", frame)
-distanceInput.PlaceholderText = "Enter distance..."
-distanceInput.Text = ""
-distanceInput.Size = UDim2.new(0.8, 0, 0, 30)
-distanceInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-distanceInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-local distanceCorner = Instance.new("UICorner", distanceInput)
-distanceCorner.CornerRadius = UDim.new(0, 6)
-
--- Variables
-local autoLockEnabled = false
-local lockPart = "Head"
-local lockDistance = 50
-local highlightEnabled = false
-local dragging, dragStart, startPos
-
--- Dragging logic (works on mobile + PC)
-titleBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = frame.Position
-	end
-end)
-
-titleBar.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		if dragging then
-			local delta = input.Position - dragStart
-			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-				startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end
-end)
-
-userInput.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = false
-	end
-end)
-
--- Find nearest player
-local function getNearestPlayer()
-	local nearest, dist = nil, math.huge
-	for _, other in ipairs(game.Players:GetPlayers()) do
-		if other ~= player and other.Character and other.Character:FindFirstChild(lockPart) then
-			local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				local distance = (other.Character[lockPart].Position - hrp.Position).Magnitude
-				if distance < dist and distance <= lockDistance then
-					nearest, dist = other, distance
-				end
-			end
-		end
-	end
-	return nearest
-end
-
--- Auto Lock behavior
-runService.RenderStepped:Connect(function()
-	if autoLockEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-		local target = getNearestPlayer()
-		if target and target.Character and target.Character:FindFirstChild(lockPart) then
-			local hrp = player.Character.HumanoidRootPart
-			local lookPos = target.Character[lockPart].Position
-			hrp.CFrame = CFrame.new(hrp.Position, Vector3.new(lookPos.X, hrp.Position.Y, lookPos.Z))
-		end
-	end
-end)
-
--- Button Actions
-autoLockBtn.MouseButton1Click:Connect(function()
-	autoLockEnabled = not autoLockEnabled
-	autoLockBtn.Text = "Activate Auto Lock: " .. (autoLockEnabled and "ON" or "OFF")
-	autoLockBtn.BackgroundColor3 = autoLockEnabled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(50, 50, 50)
-end)
-
-partBtn.MouseButton1Click:Connect(function()
-	lockPart = (lockPart == "Head") and "HumanoidRootPart" or "Head"
-	partBtn.Text = "Lock on: " .. lockPart
-end)
-
-distanceBtn.MouseButton1Click:Connect(function()
-	local input = tonumber(distanceInput.Text)
-	if input and input > 0 then
-		lockDistance = input
-		distanceBtn.Text = "Set Distance: " .. tostring(lockDistance)
-	else
-		distanceBtn.Text = "Invalid Distance"
-		task.wait(1)
-		distanceBtn.Text = "Set Distance (default: " .. tostring(lockDistance) .. ")"
-	end
-end)
-
-highlightBtn.MouseButton1Click:Connect(function()
-	highlightEnabled = not highlightEnabled
-	for _, plr in ipairs(game.Players:GetPlayers()) do
-		if plr.Character then
-			local highlight = plr.Character:FindFirstChildOfClass("Highlight")
-			if highlight then
-				highlight.Enabled = highlightEnabled
-			elseif highlightEnabled then
-				local newHighlight = Instance.new("Highlight", plr.Character)
-				newHighlight.FillColor = Color3.fromRGB(255, 255, 0)
-				newHighlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-				newHighlight.Adornee = plr.Character
-			end
-		end
-	end
-	highlightBtn.Text = "Highlight Players: " .. (highlightEnabled and "ON" or "OFF")
-end)
-
--- Close / Reopen
-closeBtn.MouseButton1Click:Connect(function()
-	frame.Visible = false
-	reopenBtn.Visible = true
-end)
-
-reopenBtn.MouseButton1Click:Connect(function()
-	frame.Visible = true
-	reopenBtn.Visible = false
+RunService.RenderStepped:Connect(function()
+    local target = getClosestTarget()
+    if target then
+        local cam = workspace.CurrentCamera
+        local direction = (target.Position - cam.CFrame.Position).Unit
+        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + direction)
+    end
 end)
