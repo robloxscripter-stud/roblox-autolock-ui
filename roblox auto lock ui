@@ -11,7 +11,9 @@ local settings = {
     snapRadius = 50,
     highlightEnabled = true,
     autoSnapEnabled = true,
-    snapPower = 1
+    snapPower = 1,
+    highlightFillColor = Color3.fromRGB(255,0,0), -- customizable
+    highlightOutlineColor = Color3.fromRGB(255,255,255) -- customizable
 }
 
 -- Create ScreenGui
@@ -21,8 +23,8 @@ screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 -- Main black frame (not draggable)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 250, 0, 250)
-mainFrame.Position = UDim2.new(0.5, -125, 0.5, -125)
+mainFrame.Size = UDim2.new(0, 250, 0, 280)
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -140)
 mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
@@ -121,7 +123,7 @@ closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
 end)
 
--- Utility functions for UI
+-- UI helper functions
 local function createLabel(text, position)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0, 220, 0, 25)
@@ -182,7 +184,7 @@ local function createToggle(default, text, position, callback)
     end)
 end
 
--- Create UI elements
+-- Create UI
 createLabel("Snap Radius", UDim2.new(0,10,0,40))
 createSlider(10,200,settings.snapRadius,UDim2.new(0,10,0,65),function(value) settings.snapRadius = value end)
 
@@ -192,14 +194,14 @@ createSlider(0,1,settings.snapPower,UDim2.new(0,10,0,120),function(value) settin
 createToggle(settings.highlightEnabled,"Highlight",UDim2.new(0,10,0,150),function(value) settings.highlightEnabled = value end)
 createToggle(settings.autoSnapEnabled,"Auto Snap",UDim2.new(0,10,0,185),function(value) settings.autoSnapEnabled = value end)
 
--- Tables to track adornments
+-- Highlight and box tracking
 local highlightTable = {}
 local boxTable = {}
 
--- Parts we want boxes on
-local boxParts = {"Torso", "Head", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}
+-- Parts for boxes
+local boxParts = {"Head","Torso","Left Arm","Right Arm","Left Leg","Right Leg"}
 
--- Check visibility using raycast
+-- Check visibility
 local function isVisible(part)
     local direction = part.Position - Camera.CFrame.Position
     local ray = Ray.new(Camera.CFrame.Position, direction)
@@ -211,25 +213,24 @@ end
 local function updateHighlights()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            -- Highlight torso
-            local torso = player.Character:FindFirstChild("Torso")
-            if torso then
-                if settings.highlightEnabled and not highlightTable[player] then
+            local head = player.Character:FindFirstChild("Head")
+            if head and settings.highlightEnabled then
+                if not highlightTable[player] then
                     local hl = Instance.new("Highlight")
-                    hl.Adornee = torso
-                    hl.FillColor = Color3.fromRGB(255,0,0)
+                    hl.Adornee = head
+                    hl.FillColor = settings.highlightFillColor
                     hl.FillTransparency = 0.6
-                    hl.OutlineColor = Color3.fromRGB(255,255,255)
+                    hl.OutlineColor = settings.highlightOutlineColor
                     hl.OutlineTransparency = 0
                     hl.Parent = LocalPlayer:WaitForChild("PlayerGui")
                     highlightTable[player] = hl
-                elseif not settings.highlightEnabled and highlightTable[player] then
-                    highlightTable[player]:Destroy()
-                    highlightTable[player] = nil
                 end
+            elseif highlightTable[player] then
+                highlightTable[player]:Destroy()
+                highlightTable[player] = nil
             end
 
-            -- Boxes on specific parts
+            -- Boxes on visible parts
             for _, partName in ipairs(boxParts) do
                 local part = player.Character:FindFirstChild(partName)
                 if part then
@@ -258,22 +259,22 @@ local function updateHighlights()
     end
 end
 
--- Get closest visible target (raycast checks walls)
+-- Get closest visible head target
 local function getVisibleTarget()
     local closest
     local closestDist = settings.snapRadius + 1
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local torso = player.Character:FindFirstChild("Torso")
-            if torso then
-                local dir = torso.Position - Camera.CFrame.Position
+            local head = player.Character:FindFirstChild("Head")
+            if head then
+                local dir = head.Position - Camera.CFrame.Position
                 local ray = Ray.new(Camera.CFrame.Position, dir)
                 local hitPart, _ = Workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
                 if hitPart and hitPart:IsDescendantOf(player.Character) then
                     local dist = dir.Magnitude
                     if dist < closestDist then
                         closestDist = dist
-                        closest = torso
+                        closest = head
                     end
                 end
             end
