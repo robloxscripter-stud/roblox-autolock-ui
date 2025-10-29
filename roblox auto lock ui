@@ -1,10 +1,12 @@
 -- LocalScript inside StarterPlayerScripts
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+local Workspace = workspace
 
--- Default settings
+-- Settings
 local settings = {
     snapRadius = 50,
     highlightEnabled = true,
@@ -17,21 +19,29 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Drag function
+-- Main black frame (holds all UI elements)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 250, 0, 250)
+mainFrame.Position = UDim2.new(0.5, -125, 0.5, -125)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+
+-- Make frame draggable (works on PC & mobile)
 local function makeDraggable(frame)
     local dragging = false
-    local dragInput, mousePos, framePos
+    local dragInput, dragStart, startPos
 
     local function update(input)
-        local delta = input.Position - mousePos
-        frame.Position = UDim2.new(frame.Position.X.Scale, framePos.X + delta.X, frame.Position.Y.Scale, framePos.Y + delta.Y)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 
     frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            mousePos = input.Position
-            framePos = frame.Position
+            dragStart = input.Position
+            startPos = frame.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -41,58 +51,45 @@ local function makeDraggable(frame)
     end)
 
     frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            dragInput = input
-        end
-    end)
-
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
+        if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and dragging then
             update(input)
         end
     end)
 end
 
--- Open button (always visible)
+makeDraggable(mainFrame)
+
+-- Open button
 local openButton = Instance.new("TextButton")
-openButton.Size = UDim2.new(0, 100, 0, 30)
+openButton.Size = UDim2.new(0, 100, 0, 35)
 openButton.Position = UDim2.new(0, 20, 0, 20)
 openButton.Text = "Settings"
-openButton.BackgroundColor3 = Color3.fromRGB(100,100,100)
+openButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
 openButton.TextScaled = true
 openButton.Parent = screenGui
 makeDraggable(openButton)
 
--- Main settings frame (black)
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 220)
-mainFrame.Position = UDim2.new(0, 150, 0, 50)
-mainFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-mainFrame.Visible = false
-mainFrame.Parent = screenGui
-makeDraggable(mainFrame)
+openButton.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible
+end)
 
 -- Close button
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 50, 0, 25)
 closeButton.Position = UDim2.new(1, -55, 0, 5)
 closeButton.Text = "X"
-closeButton.TextScaled = true
 closeButton.BackgroundColor3 = Color3.fromRGB(200,0,0)
+closeButton.TextScaled = true
 closeButton.Parent = mainFrame
 
 closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
 end)
 
-openButton.MouseButton1Click:Connect(function()
-    mainFrame.Visible = not mainFrame.Visible
-end)
-
--- Utility to create labels
+-- Utility functions
 local function createLabel(text, position)
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 200, 0, 25)
+    label.Size = UDim2.new(0, 220, 0, 25)
     label.Position = position
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
@@ -103,68 +100,64 @@ local function createLabel(text, position)
     return label
 end
 
--- Slider
 local function createSlider(min, max, default, position, callback)
     local sliderFrame = Instance.new("Frame")
-    sliderFrame.Size = UDim2.new(0, 200, 0, 20)
+    sliderFrame.Size = UDim2.new(0, 220, 0, 20)
     sliderFrame.Position = position
-    sliderFrame.BackgroundColor3 = Color3.fromRGB(70,70,70)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
     sliderFrame.Parent = mainFrame
 
-    local sliderFill = Instance.new("Frame")
-    sliderFill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
-    sliderFill.BackgroundColor3 = Color3.fromRGB(0,255,0)
-    sliderFill.Parent = sliderFrame
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default-min)/(max-min),0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,255,0)
+    fill.Parent = sliderFrame
 
     local dragging = false
     sliderFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
         end
     end)
     sliderFrame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
+        dragging = false
     end)
     sliderFrame.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging then
             local relativeX = math.clamp(input.Position.X - sliderFrame.AbsolutePosition.X, 0, sliderFrame.AbsoluteSize.X)
-            local value = min + (relativeX / sliderFrame.AbsoluteSize.X) * (max - min)
-            sliderFill.Size = UDim2.new(relativeX / sliderFrame.AbsoluteSize.X, 0, 1, 0)
+            local value = min + (relativeX/sliderFrame.AbsoluteSize.X)*(max-min)
+            fill.Size = UDim2.new(relativeX/sliderFrame.AbsoluteSize.X,0,1,0)
             callback(value)
         end
     end)
 end
 
--- Toggle
 local function createToggle(default, text, position, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 200, 0, 25)
+    button.Size = UDim2.new(0, 220, 0, 30)
     button.Position = position
-    button.Text = text .. " : " .. tostring(default)
-    button.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    button.Text = text.." : "..tostring(default)
+    button.BackgroundColor3 = Color3.fromRGB(80,80,80)
     button.TextScaled = true
     button.Parent = mainFrame
 
     button.MouseButton1Click:Connect(function()
         default = not default
-        button.Text = text .. " : " .. tostring(default)
+        button.Text = text.." : "..tostring(default)
         callback(default)
     end)
 end
 
--- Create UI elements
+-- Create UI
 createLabel("Snap Radius", UDim2.new(0,10,0,10))
-createSlider(10,200,settings.snapRadius, UDim2.new(0,10,0,35), function(value) settings.snapRadius = value end)
+createSlider(10,200,settings.snapRadius,UDim2.new(0,10,0,35),function(value) settings.snapRadius = value end)
 
-createLabel("Snap Power", UDim2.new(0,10,0,65))
-createSlider(0,1,settings.snapPower, UDim2.new(0,10,0,90), function(value) settings.snapPower = value end)
+createLabel("Snap Power",UDim2.new(0,10,0,65))
+createSlider(0,1,settings.snapPower,UDim2.new(0,10,0,90),function(value) settings.snapPower = value end)
 
-createToggle(settings.highlightEnabled, "Highlight", UDim2.new(0,10,0,125), function(value) settings.highlightEnabled = value end)
-createToggle(settings.autoSnapEnabled, "Auto Snap", UDim2.new(0,10,0,155), function(value) settings.autoSnapEnabled = value end)
+createToggle(settings.highlightEnabled,"Highlight",UDim2.new(0,10,0,125),function(value) settings.highlightEnabled = value end)
+createToggle(settings.autoSnapEnabled,"Auto Snap",UDim2.new(0,10,0,160),function(value) settings.autoSnapEnabled = value end)
 
--- Highlight functions
+-- Highlight all players
 local function highlightCharacter(character)
     for _, part in ipairs(character:GetChildren()) do
         if part:IsA("BasePart") and not part:FindFirstChild("Highlight") then
@@ -187,16 +180,24 @@ local function removeHighlight(character)
     end
 end
 
--- Get closest target
-local function getClosestTarget()
+-- Get closest visible target (raycast checks walls)
+local function getVisibleTarget()
     local closest
     local closestDist = settings.snapRadius + 1
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local dist = (player.Character.Head.Position - Camera.CFrame.Position).Magnitude
-            if dist < closestDist then
-                closestDist = dist
-                closest = player.Character.Head
+            local headPos = player.Character.Head.Position
+            local dir = headPos - Camera.CFrame.Position
+            local ray = Ray.new(Camera.CFrame.Position, dir)
+            local hitPart, hitPos = Workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character}, false, true)
+            if hitPart then
+                if hitPart:IsDescendantOf(player.Character) then
+                    local dist = dir.Magnitude
+                    if dist < closestDist then
+                        closestDist = dist
+                        closest = player.Character.Head
+                    end
+                end
             end
         end
     end
@@ -205,19 +206,22 @@ end
 
 -- Main loop
 RunService.RenderStepped:Connect(function()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local dist = (player.Character.Head.Position - Camera.CFrame.Position).Magnitude
-            if settings.highlightEnabled and dist <= settings.snapRadius then
+    if settings.highlightEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
                 highlightCharacter(player.Character)
-            else
+            end
+        end
+    else
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
                 removeHighlight(player.Character)
             end
         end
     end
 
     if settings.autoSnapEnabled and settings.snapPower > 0 then
-        local target = getClosestTarget()
+        local target = getVisibleTarget()
         if target then
             local direction = (target.Position - Camera.CFrame.Position)
             Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, Camera.CFrame.Position + direction), settings.snapPower)
