@@ -19,7 +19,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Main black frame (holds all UI elements)
+-- Main black frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 250, 0, 250)
 mainFrame.Position = UDim2.new(0.5, -125, 0.5, -125)
@@ -27,21 +27,33 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
 
--- Make frame draggable (works on PC & mobile)
-local function makeDraggable(frame)
-    local dragging = false
-    local dragInput, dragStart, startPos
+-- Top draggable bar
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 30)
+topBar.Position = UDim2.new(0,0,0,0)
+topBar.BackgroundColor3 = Color3.fromRGB(40,40,40)
+topBar.Parent = mainFrame
 
+-- Grey visual indicator
+local indicator = Instance.new("Frame")
+indicator.Size = UDim2.new(0, 100, 0, 5)
+indicator.Position = UDim2.new(0.5, -50, 0.5, -2)
+indicator.BackgroundColor3 = Color3.fromRGB(120,120,120)
+indicator.Parent = topBar
+
+-- Make topBar draggable
+do
+    local dragging = false
+    local dragStart, startPos
     local function update(input)
         local delta = input.Position - dragStart
-        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
-
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPos = frame.Position
+            startPos = mainFrame.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -49,15 +61,12 @@ local function makeDraggable(frame)
             end)
         end
     end)
-
-    frame.InputChanged:Connect(function(input)
-        if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) and dragging then
+    topBar.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             update(input)
         end
     end)
 end
-
-makeDraggable(mainFrame)
 
 -- Open button
 local openButton = Instance.new("TextButton")
@@ -67,7 +76,6 @@ openButton.Text = "Settings"
 openButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
 openButton.TextScaled = true
 openButton.Parent = screenGui
-makeDraggable(openButton)
 
 openButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = not mainFrame.Visible
@@ -76,11 +84,11 @@ end)
 -- Close button
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 50, 0, 25)
-closeButton.Position = UDim2.new(1, -55, 0, 5)
+closeButton.Position = UDim2.new(1, -55, 0, 2)
 closeButton.Text = "X"
 closeButton.BackgroundColor3 = Color3.fromRGB(200,0,0)
 closeButton.TextScaled = true
-closeButton.Parent = mainFrame
+closeButton.Parent = topBar
 
 closeButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
@@ -148,34 +156,41 @@ local function createToggle(default, text, position, callback)
 end
 
 -- Create UI
-createLabel("Snap Radius", UDim2.new(0,10,0,10))
-createSlider(10,200,settings.snapRadius,UDim2.new(0,10,0,35),function(value) settings.snapRadius = value end)
+createLabel("Snap Radius", UDim2.new(0,10,0,40))
+createSlider(10,200,settings.snapRadius,UDim2.new(0,10,0,65),function(value) settings.snapRadius = value end)
 
-createLabel("Snap Power",UDim2.new(0,10,0,65))
-createSlider(0,1,settings.snapPower,UDim2.new(0,10,0,90),function(value) settings.snapPower = value end)
+createLabel("Snap Power",UDim2.new(0,10,0,95))
+createSlider(0,1,settings.snapPower,UDim2.new(0,10,0,120),function(value) settings.snapPower = value end)
 
-createToggle(settings.highlightEnabled,"Highlight",UDim2.new(0,10,0,125),function(value) settings.highlightEnabled = value end)
-createToggle(settings.autoSnapEnabled,"Auto Snap",UDim2.new(0,10,0,160),function(value) settings.autoSnapEnabled = value end)
+createToggle(settings.highlightEnabled,"Highlight",UDim2.new(0,10,0,150),function(value) settings.highlightEnabled = value end)
+createToggle(settings.autoSnapEnabled,"Auto Snap",UDim2.new(0,10,0,185),function(value) settings.autoSnapEnabled = value end)
 
--- Highlight all players
+-- Highlight all players except local
+local highlightAdornments = {}
+
 local function highlightCharacter(character)
     for _, part in ipairs(character:GetChildren()) do
-        if part:IsA("BasePart") and not part:FindFirstChild("Highlight") then
-            local box = Instance.new("SelectionBox")
-            box.Adornee = part
-            box.LineThickness = 0.05
-            box.Color3 = Color3.new(1, 0, 0)
-            box.Parent = part
-            box.Name = "Highlight"
+        if part:IsA("BasePart") then
+            if not highlightAdornments[part] then
+                local adorn = Instance.new("BoxHandleAdornment")
+                adorn.Adornee = part
+                adorn.Size = part.Size
+                adorn.Color3 = Color3.fromRGB(255,0,0)
+                adorn.Transparency = 0.6
+                adorn.AlwaysOnTop = true
+                adorn.ZIndex = 10
+                adorn.Parent = part
+                highlightAdornments[part] = adorn
+            end
         end
     end
 end
 
 local function removeHighlight(character)
     for _, part in ipairs(character:GetChildren()) do
-        local box = part:FindFirstChild("Highlight")
-        if box then
-            box:Destroy()
+        if highlightAdornments[part] then
+            highlightAdornments[part]:Destroy()
+            highlightAdornments[part] = nil
         end
     end
 end
@@ -206,15 +221,11 @@ end
 
 -- Main loop
 RunService.RenderStepped:Connect(function()
-    if settings.highlightEnabled then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character then
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if settings.highlightEnabled then
                 highlightCharacter(player.Character)
-            end
-        end
-    else
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character then
+            else
                 removeHighlight(player.Character)
             end
         end
