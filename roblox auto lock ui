@@ -12,32 +12,107 @@ local settings = {
     snapPower = 1
 }
 
--- UI creation
+-- Create ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.ResetOnSpawn = false
 screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Drag function
+local function makeDraggable(frame)
+    local dragging = false
+    local dragInput, mousePos, framePos
+
+    local function update(input)
+        local delta = input.Position - mousePos
+        frame.Position = UDim2.new(frame.Position.X.Scale, framePos.X + delta.X, frame.Position.Y.Scale, framePos.Y + delta.Y)
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            mousePos = input.Position
+            framePos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+-- Open button (always visible)
+local openButton = Instance.new("TextButton")
+openButton.Size = UDim2.new(0, 100, 0, 30)
+openButton.Position = UDim2.new(0, 20, 0, 20)
+openButton.Text = "Settings"
+openButton.BackgroundColor3 = Color3.fromRGB(100,100,100)
+openButton.TextScaled = true
+openButton.Parent = screenGui
+makeDraggable(openButton)
+
+-- Main settings frame (black)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 220)
+mainFrame.Position = UDim2.new(0, 150, 0, 50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
+makeDraggable(mainFrame)
+
+-- Close button
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 50, 0, 25)
+closeButton.Position = UDim2.new(1, -55, 0, 5)
+closeButton.Text = "X"
+closeButton.TextScaled = true
+closeButton.BackgroundColor3 = Color3.fromRGB(200,0,0)
+closeButton.Parent = mainFrame
+
+closeButton.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+end)
+
+openButton.MouseButton1Click:Connect(function()
+    mainFrame.Visible = not mainFrame.Visible
+end)
+
+-- Utility to create labels
 local function createLabel(text, position)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0, 200, 0, 25)
     label.Position = position
-    label.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
     label.Text = text
     label.TextScaled = true
-    label.Parent = screenGui
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = mainFrame
     return label
 end
 
+-- Slider
 local function createSlider(min, max, default, position, callback)
     local sliderFrame = Instance.new("Frame")
-    sliderFrame.Size = UDim2.new(0, 200, 0, 30)
+    sliderFrame.Size = UDim2.new(0, 200, 0, 20)
     sliderFrame.Position = position
     sliderFrame.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    sliderFrame.Parent = screenGui
+    sliderFrame.Parent = mainFrame
 
     local sliderFill = Instance.new("Frame")
-    sliderFill.Size = UDim2.new(default, 0, 1, 0)
+    sliderFill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
     sliderFill.BackgroundColor3 = Color3.fromRGB(0,255,0)
     sliderFill.Parent = sliderFrame
 
@@ -62,14 +137,15 @@ local function createSlider(min, max, default, position, callback)
     end)
 end
 
+-- Toggle
 local function createToggle(default, text, position, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 200, 0, 30)
+    button.Size = UDim2.new(0, 200, 0, 25)
     button.Position = position
     button.Text = text .. " : " .. tostring(default)
     button.BackgroundColor3 = Color3.fromRGB(100,100,100)
     button.TextScaled = true
-    button.Parent = screenGui
+    button.Parent = mainFrame
 
     button.MouseButton1Click:Connect(function()
         default = not default
@@ -79,21 +155,14 @@ local function createToggle(default, text, position, callback)
 end
 
 -- Create UI elements
-createSlider(10, 200, 50/200, UDim2.new(0,10,0,10), function(value)
-    settings.snapRadius = value
-end)
+createLabel("Snap Radius", UDim2.new(0,10,0,10))
+createSlider(10,200,settings.snapRadius, UDim2.new(0,10,0,35), function(value) settings.snapRadius = value end)
 
-createSlider(0, 1, 1, UDim2.new(0,10,0,50), function(value)
-    settings.snapPower = value
-end)
+createLabel("Snap Power", UDim2.new(0,10,0,65))
+createSlider(0,1,settings.snapPower, UDim2.new(0,10,0,90), function(value) settings.snapPower = value end)
 
-createToggle(settings.highlightEnabled, "Highlight", UDim2.new(0,10,0,90), function(value)
-    settings.highlightEnabled = value
-end)
-
-createToggle(settings.autoSnapEnabled, "Auto Snap", UDim2.new(0,10,0,130), function(value)
-    settings.autoSnapEnabled = value
-end)
+createToggle(settings.highlightEnabled, "Highlight", UDim2.new(0,10,0,125), function(value) settings.highlightEnabled = value end)
+createToggle(settings.autoSnapEnabled, "Auto Snap", UDim2.new(0,10,0,155), function(value) settings.autoSnapEnabled = value end)
 
 -- Highlight functions
 local function highlightCharacter(character)
@@ -118,7 +187,7 @@ local function removeHighlight(character)
     end
 end
 
--- Get closest target within radius
+-- Get closest target
 local function getClosestTarget()
     local closest
     local closestDist = settings.snapRadius + 1
@@ -147,14 +216,11 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    if settings.autoSnapEnabled then
+    if settings.autoSnapEnabled and settings.snapPower > 0 then
         local target = getClosestTarget()
-        if target and settings.snapPower > 0 then
-            local cam = Camera
-            local direction = (target.Position - cam.CFrame.Position)
-            local newCFrame = cam.CFrame:Lerp(CFrame.lookAt(cam.CFrame.Position, cam.CFrame.Position + direction), settings.snapPower)
-            cam.CFrame = newCFrame
+        if target then
+            local direction = (target.Position - Camera.CFrame.Position)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.lookAt(Camera.CFrame.Position, Camera.CFrame.Position + direction), settings.snapPower)
         end
     end
 end)
-
